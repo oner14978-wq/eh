@@ -56,6 +56,29 @@ jobs:
           done
           echo "SRC=$src" >> "$GITHUB_ENV"
           echo "Projeto completo em $src"
+      - name: Corrigir dependencia starling-account no horizon-client
+        working-directory: ${{ env.SRC }}
+        run: |
+          cli="crates/horizon-client/Cargo.toml"
+          [ -f "$cli" ] || { echo "Faltando $cli"; exit 1; }
+          if grep -Eq '^[[:space:]]*starling[-_]account[[:space:]]*(=|\.)' "$cli"; then
+            echo "Dependencia starling-account ja declarada."
+            exit 0
+          fi
+          acc=$(grep -rlE --include=Cargo.toml '^name[[:space:]]*=[[:space:]]*"starling[-_]account"' . | grep -v '/target/' | head -1 || true)
+          if [ -z "$acc" ]; then
+            echo "O crate starling-account NAO existe neste projeto."
+            echo "Falta a pasta dele nos zips (cat_bridge.rs usa starling_account::files::Pins)."
+            exit 1
+          fi
+          rel=$(realpath --relative-to="crates/horizon-client" "$(dirname "$acc")")
+          line="starling-account = { path = \"$rel\" }"
+          if grep -q '^\[dependencies\]' "$cli"; then
+            sed -i "0,/^\[dependencies\]/s||[dependencies]\n$line|" "$cli"
+          else
+            printf '\n[dependencies]\n%s\n' "$line" >> "$cli"
+          fi
+          echo "Adicionado em $cli: $line"
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -109,4 +132,3 @@ jobs:
           path: ${{ env.SRC }}/target/android/Cat-Launcher-*.apk
           if-no-files-found: error
           retention-days: 30
-          
